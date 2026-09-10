@@ -66,7 +66,7 @@ jobs:
           make
           make dist
           # Surface the artifact path for the release step.
-          echo "TARBALL=build/knit-graph-${VERSION_NEW}.tar.gz" >> "$GITHUB_ENV"
+          echo "TARBALL=build/knit-cypher-to-sql-${VERSION_NEW}.tar.gz" >> "$GITHUB_ENV"
 
       - name: Create the tag and GitHub release
         env:

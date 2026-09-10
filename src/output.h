@@ -4,15 +4,15 @@
  * The result set is buffered whole (see ResultSet) because several modes need
  * to know every value before writing the first byte: column/table/box/markdown
  * size each column to its widest cell, and json emits a single array. Rendering
- * mirrors the sqlite3 shell byte for byte so a knit-graph query can be diffed
+ * mirrors the sqlite3 shell byte for byte so a knit-cypher-to-sql query can be diffed
  * against the equivalent sqlite3 CLI invocation.
  *
  * Empty result sets produce no output at all, in every mode -- matching the
  * sqlite3 shell, which prints nothing (not even a header) when no rows match.
  */
 
-#ifndef KNIT_GRAPH_OUTPUT_H
-#define KNIT_GRAPH_OUTPUT_H
+#ifndef KNIT_CYPHER_TO_SQL_OUTPUT_H
+#define KNIT_CYPHER_TO_SQL_OUTPUT_H
 
 #include <stdio.h>
 
@@ -56,4 +56,4 @@ typedef struct {
 /* Render rs to out in the requested mode. */
 void output_result(FILE *out, const ResultSet *rs, const OutputOptions *opts);
 
-#endif /* KNIT_GRAPH_OUTPUT_H */
+#endif /* KNIT_CYPHER_TO_SQL_OUTPUT_H */

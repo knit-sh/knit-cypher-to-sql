@@ -3,8 +3,8 @@
  * SQL text incrementally.
  */
 
-#ifndef KNIT_GRAPH_SQLBUF_H
-#define KNIT_GRAPH_SQLBUF_H
+#ifndef KNIT_CYPHER_TO_SQL_SQLBUF_H
+#define KNIT_CYPHER_TO_SQL_SQLBUF_H
 
 #include <stddef.h>
 
@@ -35,4 +35,4 @@ char *sqlbuf_detach(SqlBuf *b);
 /* Release the buffer's storage. */
 void sqlbuf_free(SqlBuf *b);
 
-#endif /* KNIT_GRAPH_SQLBUF_H */
+#endif /* KNIT_CYPHER_TO_SQL_SQLBUF_H */

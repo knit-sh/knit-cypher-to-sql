@@ -1,10 +1,10 @@
 /*
- * names.h -- the command-name <-> table-name map knit-graph resolves labels
+ * names.h -- the command-name <-> table-name map knit-cypher-to-sql resolves labels
  * through.
  *
  * A Cypher node label plays two roles against the provenance schema: it names
  * the table to JOIN (to read a node's columns) and it supplies the value a
- * `source_name`/`target_name` edge filter matches. knit-graph assumes both
+ * `source_name`/`target_name` edge filter matches. knit-cypher-to-sql assumes both
  * equal the label, but in a Knit database an override command records its
  * *command name* in `*_name` while its rows live in a differently named table
  * (e.g. the `submit` command's rows live in `jobs`). The map bridges the two:
@@ -23,8 +23,8 @@
  * The map owns all of its memory; names_free releases it.
  */
 
-#ifndef KNIT_GRAPH_NAMES_H
-#define KNIT_GRAPH_NAMES_H
+#ifndef KNIT_CYPHER_TO_SQL_NAMES_H
+#define KNIT_CYPHER_TO_SQL_NAMES_H
 
 #include <sqlite3.h>
 
@@ -65,4 +65,4 @@ int names_resolve(const NameMap *map, const char *label,
 
 void names_free(NameMap *map);
 
-#endif /* KNIT_GRAPH_NAMES_H */
+#endif /* KNIT_CYPHER_TO_SQL_NAMES_H */

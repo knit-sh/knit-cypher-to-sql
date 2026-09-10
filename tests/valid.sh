@@ -1,6 +1,6 @@
 #!/bin/sh
 # Every statement here is valid read-only Cypher and must parse (exit 0).
-KG=${KG:-./src/knit-graph}
+KG=${KG:-./src/knit-cypher-to-sql}
 fail=0
 
 # Quoted heredoc: backticks and $ are literal, one query per line.

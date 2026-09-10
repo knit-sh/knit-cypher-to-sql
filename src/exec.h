@@ -5,8 +5,8 @@
  * and hands it to the output module to render in the requested mode (opts).
  */
 
-#ifndef KNIT_GRAPH_EXEC_H
-#define KNIT_GRAPH_EXEC_H
+#ifndef KNIT_CYPHER_TO_SQL_EXEC_H
+#define KNIT_CYPHER_TO_SQL_EXEC_H
 
 #include <sqlite3.h>
 
@@ -20,4 +20,4 @@
 int exec_query(sqlite3 *db, const char *sql, const OutputOptions *opts,
 	       char **errmsg);
 
-#endif /* KNIT_GRAPH_EXEC_H */
+#endif /* KNIT_CYPHER_TO_SQL_EXEC_H */

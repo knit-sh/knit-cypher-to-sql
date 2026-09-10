@@ -1,8 +1,8 @@
-## Builds the knit-graph CLI.
+## Builds the knit-cypher-to-sql CLI.
 
-bin_PROGRAMS = knit-graph
+bin_PROGRAMS = knit-cypher-to-sql
 
-knit_graph_SOURCES = \
+knit_cypher_to_sql_SOURCES = \
 	main.c \
 	ast.c ast.h \
 	catalog.c catalog.h \
@@ -22,6 +22,6 @@ AM_YFLAGS = -d -Wno-yacc
 BUILT_SOURCES = cypher_parser.h
 
 AM_CFLAGS = $(COVERAGE_CFLAGS)
-knit_graph_LDFLAGS = $(COVERAGE_LDFLAGS)
+knit_cypher_to_sql_LDFLAGS = $(COVERAGE_LDFLAGS)
 
 CLEANFILES = cypher_parser.c cypher_parser.h cypher_scanner.c

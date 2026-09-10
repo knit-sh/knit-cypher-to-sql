@@ -1,11 +1,11 @@
 #!/bin/sh
 # output.sh -- M10 output modes. For each sqlite3 CLI output mode, translate a
-# Cypher query with knit-graph and diff its rendered output against the sqlite3
+# Cypher query with knit-cypher-to-sql and diff its rendered output against the sqlite3
 # CLI's output for the equivalent SQL (obtained from --explain). Both sides run
-# the same sqlite3 version, so this pins knit-graph's formatting to the shell's.
+# the same sqlite3 version, so this pins knit-cypher-to-sql's formatting to the shell's.
 # Skipped if the sqlite3 CLI is unavailable.
 
-: "${KG:?KG must point at the knit-graph binary}"
+: "${KG:?KG must point at the knit-cypher-to-sql binary}"
 : "${srcdir:?srcdir must be set}"
 
 . "$srcdir/fixture.sh"

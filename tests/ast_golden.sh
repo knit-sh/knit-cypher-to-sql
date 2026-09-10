@@ -1,6 +1,6 @@
 #!/bin/sh
 # Compare the --ast dump of each golden query against its recorded output.
-KG=${KG:-./src/knit-graph}
+KG=${KG:-./src/knit-cypher-to-sql}
 srcdir=${srcdir:-.}
 fail=0
 

@@ -12,7 +12,7 @@ static void *xcalloc(size_t n)
 {
 	void *p = calloc(1, n);
 	if (!p) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	return p;

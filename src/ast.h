@@ -1,11 +1,11 @@
 /*
- * ast.h -- abstract syntax tree for the read-only Cypher subset knit-graph
+ * ast.h -- abstract syntax tree for the read-only Cypher subset knit-cypher-to-sql
  * understands. The grammar (cypher_parser.y) builds these nodes; the
  * transformer (M3+) consumes them.
  */
 
-#ifndef KNIT_GRAPH_AST_H
-#define KNIT_GRAPH_AST_H
+#ifndef KNIT_CYPHER_TO_SQL_AST_H
+#define KNIT_CYPHER_TO_SQL_AST_H
 
 #include <stdio.h>
 
@@ -219,4 +219,4 @@ void ast_dump(FILE *out, const Query *q);
  */
 int cypher_parse(const char *text, Query **out, char **errmsg);
 
-#endif /* KNIT_GRAPH_AST_H */
+#endif /* KNIT_CYPHER_TO_SQL_AST_H */

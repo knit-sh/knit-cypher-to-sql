@@ -369,7 +369,7 @@ void output_result(FILE *out, const ResultSet *rs, const OutputOptions *o)
 	if (!w || !buf) {
 		free(w);
 		free(buf);
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		return;
 	}
 

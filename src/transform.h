@@ -7,8 +7,8 @@
  * are rejected with a clear message rather than silently mistranslated.
  */
 
-#ifndef KNIT_GRAPH_TRANSFORM_H
-#define KNIT_GRAPH_TRANSFORM_H
+#ifndef KNIT_CYPHER_TO_SQL_TRANSFORM_H
+#define KNIT_CYPHER_TO_SQL_TRANSFORM_H
 
 #include "ast.h"
 #include "catalog.h"
@@ -25,4 +25,4 @@
 int transform_query(const Query *q, const Catalog *cat, const NameMap *map,
                     char **sql, char **errmsg);
 
-#endif /* KNIT_GRAPH_TRANSFORM_H */
+#endif /* KNIT_CYPHER_TO_SQL_TRANSFORM_H */

@@ -3,11 +3,11 @@
 #
 # A definite/indirect leak or any memory error makes valgrind exit with the
 # distinctive code 99, which we treat as a failure. Ordinary non-zero exits
-# from knit-graph itself (e.g. exit 1 on a rejected query) pass straight
+# from knit-cypher-to-sql itself (e.g. exit 1 on a rejected query) pass straight
 # through valgrind, so the error path is checked for leaks without its exit
 # code being mistaken for one. Skipped if valgrind is not installed.
 
-: "${KG:?KG must point at the knit-graph binary}"
+: "${KG:?KG must point at the knit-cypher-to-sql binary}"
 : "${srcdir:?srcdir must be set}"
 
 if ! command -v valgrind >/dev/null 2>&1; then

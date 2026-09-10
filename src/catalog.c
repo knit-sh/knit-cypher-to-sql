@@ -18,7 +18,7 @@ static char *xstrdup(const char *s)
 {
 	char *p = strdup(s ? s : "");
 	if (!p) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	return p;
@@ -35,7 +35,7 @@ static void table_add_column(CatalogTable *t, const char *col)
 {
 	char **grown = realloc(t->columns, (t->ncolumns + 1) * sizeof(*grown));
 	if (!grown) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	t->columns = grown;
@@ -101,7 +101,7 @@ static CatalogTable *catalog_add_table(Catalog *cat, const char *name)
 	CatalogTable *grown =
 		realloc(cat->tables, (cat->ntables + 1) * sizeof(*grown));
 	if (!grown) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	cat->tables = grown;

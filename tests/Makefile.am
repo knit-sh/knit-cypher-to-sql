@@ -2,7 +2,7 @@
 
 # Make the built binary and the source dir available to the scripts.
 AM_TESTS_ENVIRONMENT = \
-	KG='$(abs_top_builddir)/src/knit-graph'; export KG; \
+	KG='$(abs_top_builddir)/src/knit-cypher-to-sql'; export KG; \
 	srcdir='$(srcdir)'; export srcdir;
 
 # Run *.sh tests through the shell so they need no execute bit.

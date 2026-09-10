@@ -29,7 +29,7 @@ static char *xstrdup(const char *s)
 {
 	char *p = strdup(s ? s : "");
 	if (!p) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	return p;
@@ -52,7 +52,7 @@ static NameMap *map_new(void)
 {
 	NameMap *m = calloc(1, sizeof *m);
 	if (!m) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	return m;
@@ -64,7 +64,7 @@ static void map_add(NameMap *m, const char *table, const char *name)
 	NameEntry *grown =
 		realloc(m->entries, (m->n + 1) * sizeof *grown);
 	if (!grown) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	m->entries = grown;
@@ -170,7 +170,7 @@ int names_parse_file(const char *path, NameMap **out, char **errmsg)
 	size_t cap = 4096, len = 0;
 	char *buf = malloc(cap);
 	if (!buf) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	size_t got;
@@ -180,7 +180,7 @@ int names_parse_file(const char *path, NameMap **out, char **errmsg)
 			cap *= 2;
 			char *grown = realloc(buf, cap);
 			if (!grown) {
-				fprintf(stderr, "knit-graph: out of memory\n");
+				fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 				exit(1);
 			}
 			buf = grown;

@@ -1,5 +1,5 @@
 /*
- * catalog.h -- schema introspection for a knit-graph provenance database.
+ * catalog.h -- schema introspection for a knit-cypher-to-sql provenance database.
  *
  * On load the catalog reads sqlite_master and PRAGMA table_info to learn which
  * tables exist and what columns each has. Function (node) tables use their
@@ -15,8 +15,8 @@
  * The catalog owns all of its memory; catalog_free releases it.
  */
 
-#ifndef KNIT_GRAPH_CATALOG_H
-#define KNIT_GRAPH_CATALOG_H
+#ifndef KNIT_CYPHER_TO_SQL_CATALOG_H
+#define KNIT_CYPHER_TO_SQL_CATALOG_H
 
 #include <sqlite3.h>
 
@@ -49,4 +49,4 @@ const CatalogTable *catalog_find_table(const Catalog *cat, const char *name);
 /* Non-zero if the table has a column with the given name. */
 int catalog_table_has_column(const CatalogTable *t, const char *column);
 
-#endif /* KNIT_GRAPH_CATALOG_H */
+#endif /* KNIT_CYPHER_TO_SQL_CATALOG_H */

@@ -4,7 +4,7 @@
 AC_PREREQ([2.71])
 # The version is kept in the top-level VERSION file and read here at autoreconf
 # time (m4_esyscmd_s strips the trailing newline).
-AC_INIT([knit-graph],[m4_esyscmd_s([cat VERSION])],[https://github.com/knit-sh/knit-graph])
+AC_INIT([knit-cypher-to-sql],[m4_esyscmd_s([cat VERSION])],[https://github.com/knit-sh/knit-cypher-to-sql])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([src/main.c])
@@ -23,7 +23,7 @@ AC_PROG_LEX([noyywrap])
 # paths: DIR/include for the header and DIR/lib for the library, with an rpath so
 # the resulting binary finds a shared libsqlite3 there at runtime. Without it, the
 # default search paths are used (a system-wide libsqlite3-dev). This is how Knit
-# builds knit-graph against its own private sqlite (.knit/sqlite).
+# builds knit-cypher-to-sql against its own private sqlite (.knit/sqlite).
 AC_ARG_WITH([sqlite3],
   [AS_HELP_STRING([--with-sqlite3=DIR],
     [prefix of the SQLite3 installation to build against (uses DIR/include and DIR/lib)])],

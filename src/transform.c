@@ -1,5 +1,5 @@
 /*
- * transform.c -- AST -> SQL for the Cypher pattern shapes knit-graph handles.
+ * transform.c -- AST -> SQL for the Cypher pattern shapes knit-cypher-to-sql handles.
  *
  *   MATCH (a:`ns:f`) RETURN a.x
  *       -> SELECT a."x" FROM "ns:f" a
@@ -208,7 +208,7 @@ static int emit_expr(SqlBuf *b, const Expr *e, const Catalog *cat,
 
 /*
  * Map a Cypher aggregate name (case-insensitively) to its SQL spelling, or
- * NULL if it is not one of the aggregates knit-graph supports. `collect`
+ * NULL if it is not one of the aggregates knit-cypher-to-sql supports. `collect`
  * becomes SQLite's json_group_array; the rest keep their name.
  */
 static const char *agg_sql_name(const char *fn)
@@ -630,7 +630,7 @@ static char *own_alias(char **owned, int *nowned, const char *fmt, int n)
 	snprintf(buf, sizeof buf, fmt, n);
 	char *s = strdup(buf);
 	if (!s) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	owned[(*nowned)++] = s;
@@ -754,7 +754,7 @@ static int transform_general(const Match *m, const Return *r,
 	Bind *binds = calloc((size_t)cap_nodes + cap_edges + 1, sizeof *binds);
 	char **owned = calloc((size_t)cap_nodes + cap_edges + 1, sizeof *owned);
 	if (!slots || !edges || !binds || !owned) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	int nslots = 0, nedges = 0, nb = 0, nowned = 0, rc = 1;

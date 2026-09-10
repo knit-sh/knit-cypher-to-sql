@@ -17,7 +17,7 @@
 
 static void oom(void)
 {
-	fprintf(stderr, "knit-graph: out of memory\n");
+	fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 	exit(1);
 }
 

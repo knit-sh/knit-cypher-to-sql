@@ -4,7 +4,7 @@
 # checks that label/property resolution and not-yet-supported constructs are
 # reported as errors. Skipped if the sqlite3 CLI is unavailable.
 
-: "${KG:?KG must point at the knit-graph binary}"
+: "${KG:?KG must point at the knit-cypher-to-sql binary}"
 : "${srcdir:?srcdir must be set}"
 
 . "$srcdir/fixture.sh"

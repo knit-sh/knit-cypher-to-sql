@@ -1,5 +1,5 @@
 /*
- * knit-graph -- translate a read-only Cypher statement into SQL and run it
+ * knit-cypher-to-sql -- translate a read-only Cypher statement into SQL and run it
  * against a SQLite provenance database.
  *
  * The plain DBFILE + query path runs end to end -- parse, translate to SQL
@@ -29,7 +29,7 @@
 #include "names.h"
 #include "transform.h"
 
-static const char *PROG = "knit-graph";
+static const char *PROG = "knit-cypher-to-sql";
 
 static void usage(FILE *out)
 {

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Every statement here is invalid or a write clause and must be rejected
 # (non-zero exit). Write clauses are rejected because the grammar omits them.
-KG=${KG:-./src/knit-graph}
+KG=${KG:-./src/knit-cypher-to-sql}
 fail=0
 
 check_rejected() {

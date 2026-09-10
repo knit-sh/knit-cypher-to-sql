@@ -24,7 +24,7 @@ static char *dup_or_die(const char *s)
 {
 	char *p = strdup(s ? s : "");
 	if (!p) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	return p;
@@ -64,7 +64,7 @@ int exec_query(sqlite3 *db, const char *sql, const OutputOptions *opts,
 	rs.ncols = sqlite3_column_count(stmt);
 	rs.names = calloc(rs.ncols > 0 ? rs.ncols : 1, sizeof(*rs.names));
 	if (!rs.names) {
-		fprintf(stderr, "knit-graph: out of memory\n");
+		fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 		exit(1);
 	}
 	for (int c = 0; c < rs.ncols; c++)
@@ -79,7 +79,7 @@ int exec_query(sqlite3 *db, const char *sql, const OutputOptions *opts,
 			if (!nr || !nt) {
 				free(nr ? nr : rs.rows);
 				free(nt ? nt : rs.types);
-				fprintf(stderr, "knit-graph: out of memory\n");
+				fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 				exit(1);
 			}
 			rs.rows = nr;
@@ -91,7 +91,7 @@ int exec_query(sqlite3 *db, const char *sql, const OutputOptions *opts,
 		if (!row || !types) {
 			free(row);
 			free(types);
-			fprintf(stderr, "knit-graph: out of memory\n");
+			fprintf(stderr, "knit-cypher-to-sql: out of memory\n");
 			exit(1);
 		}
 		for (int c = 0; c < rs.ncols; c++) {

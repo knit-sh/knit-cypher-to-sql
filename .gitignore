@@ -3,7 +3,7 @@
 *.lo
 *.a
 *.la
-/src/knit-graph
+/src/knit-cypher-to-sql
 
 # Out-of-tree build directory (the project builds in ./build)
 /build/

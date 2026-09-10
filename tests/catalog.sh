@@ -4,7 +4,7 @@
 # Checks that --catalog lists tables/columns correctly and that lookups of a
 # known table/column succeed while unknown ones fail with a non-zero exit.
 
-: "${KG:?KG must point at the knit-graph binary}"
+: "${KG:?KG must point at the knit-cypher-to-sql binary}"
 : "${srcdir:?srcdir must be set}"
 
 . "$srcdir/fixture.sh"

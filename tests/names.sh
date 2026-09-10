@@ -8,7 +8,7 @@
 # actually exercised -- unlike the shared fixture, where table == name. Skipped
 # if the sqlite3 CLI is unavailable.
 
-: "${KG:?KG must point at the knit-graph binary}"
+: "${KG:?KG must point at the knit-cypher-to-sql binary}"
 
 command -v sqlite3 >/dev/null 2>&1 || {
 	echo "sqlite3 CLI unavailable; skipping names test"

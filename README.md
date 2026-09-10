@@ -1,21 +1,21 @@
-# knit-graph
+# knit-cypher-to-sql
 
-[![CI](https://github.com/knit-sh/knit-graph/actions/workflows/ci.yml/badge.svg)](https://github.com/knit-sh/knit-graph/actions/workflows/ci.yml)
-[![Code coverage](https://github.com/knit-sh/knit-graph/actions/workflows/coverage.yml/badge.svg)](https://github.com/knit-sh/knit-graph/actions/workflows/coverage.yml)
-[![codecov](https://codecov.io/gh/knit-sh/knit-graph/branch/main/graph/badge.svg)](https://codecov.io/gh/knit-sh/knit-graph)
+[![CI](https://github.com/knit-sh/knit-cypher-to-sql/actions/workflows/ci.yml/badge.svg)](https://github.com/knit-sh/knit-cypher-to-sql/actions/workflows/ci.yml)
+[![Code coverage](https://github.com/knit-sh/knit-cypher-to-sql/actions/workflows/coverage.yml/badge.svg)](https://github.com/knit-sh/knit-cypher-to-sql/actions/workflows/coverage.yml)
+[![codecov](https://codecov.io/gh/knit-sh/knit-cypher-to-sql/branch/main/graph/badge.svg)](https://codecov.io/gh/knit-sh/knit-cypher-to-sql)
 
 A standalone C program that accepts a read-only [Cypher](https://opencypher.org/) statement,
 translates it to SQL, and runs it against a SQLite **provenance** database from the Knit framework — so graph-shaped
 questions can be asked in graph syntax while all storage and execution stay in SQLite.
 
-knit-graph is inspired by [graphqlite](https://github.com/dpapathanasiou/graphqlite): it
+knit-cypher-to-sql is inspired by [graphqlite](https://github.com/dpapathanasiou/graphqlite): it
 reuses the ideas — a Cypher→SQL transpiler pipeline, backtick-quoted labels, an `--explain` mode —
 but is an independent implementation with its own compact parser and a transformer specialised to the
 fixed provenance schema below.
 
 ## The database schema
 
-knit-graph targets one specific shape of SQLite database:
+knit-cypher-to-sql targets one specific shape of SQLite database:
 
 - **Node tables** — one per function, named e.g. `` `ns:f` `` (namespaces separated by colons). The
   columns are the function's arguments and return values, plus an `id` column holding a uuid7 that
@@ -39,7 +39,7 @@ make
 ```
 
 Build dependencies: gcc, autoconf, automake, bison, flex, and the sqlite3 C library. No libtool
-(knit-graph is a standalone binary). These apply to the **git checkout**, where the parser/scanner
+(knit-cypher-to-sql is a standalone binary). These apply to the **git checkout**, where the parser/scanner
 are regenerated from `cypher_parser.y` / `cypher_scanner.l`.
 
 ### Building from a release tarball
@@ -49,7 +49,7 @@ A `make dist` tarball already contains the generated parser and scanner (`cypher
 autotools, bison, and flex are *not* required:
 
 ```sh
-tar xzf knit-graph-0.1.0.tar.gz && cd knit-graph-0.1.0
+tar xzf knit-cypher-to-sql-0.1.0.tar.gz && cd knit-cypher-to-sql-0.1.0
 mkdir build && cd build
 ../configure
 make
@@ -68,16 +68,16 @@ a custom prefix instead, pass `--with-sqlite3=DIR`:
 
 This adds `DIR/include` to the header search path and `DIR/lib` to the library
 search path, and records an rpath to `DIR/lib` so the resulting binary finds a
-shared `libsqlite3` there at runtime. Knit uses this to build knit-graph against
+shared `libsqlite3` there at runtime. Knit uses this to build knit-cypher-to-sql against
 its own private SQLite (`.knit/sqlite`).
 
 ## Usage
 
 ```
-knit-graph [OUTPUT-OPTIONS] [NAME-OPTIONS] DBFILE 'CYPHER'
-knit-graph --ast 'CYPHER'
-knit-graph [NAME-OPTIONS] --explain DBFILE 'CYPHER'
-knit-graph --catalog DBFILE [TABLE[.COLUMN]]
+knit-cypher-to-sql [OUTPUT-OPTIONS] [NAME-OPTIONS] DBFILE 'CYPHER'
+knit-cypher-to-sql --ast 'CYPHER'
+knit-cypher-to-sql [NAME-OPTIONS] --explain DBFILE 'CYPHER'
+knit-cypher-to-sql --catalog DBFILE [TABLE[.COLUMN]]
 ```
 
 Modes:
@@ -109,7 +109,7 @@ nothing in every mode (matching the sqlite3 shell).
 ### Label resolution (name map)
 
 A Cypher node label serves two purposes against the provenance schema: it names the table to JOIN
-and it supplies the value a `source_name`/`target_name` edge filter matches. knit-graph assumes both
+and it supplies the value a `source_name`/`target_name` edge filter matches. knit-cypher-to-sql assumes both
 equal the label, which holds for a plain function table. But a Knit *override* command records its
 command name in `*_name` while its rows live in a differently named table (e.g. the `submit` command
 writes `jobs`). A **name map** bridges the two — each entry pairs a table name with the recorded name
@@ -132,23 +132,23 @@ experiment's registered commands and passes it on every invocation.
 
 ```sh
 # The five most-called ns2:g targets, as JSON.
-knit-graph -json prov.db \
+knit-cypher-to-sql -json prov.db \
   "MATCH (a:\`ns:f\`)-[:calls]->(b:\`ns2:g\`) RETURN b.id, count(*) AS n ORDER BY n DESC LIMIT 5"
 
 # A whole node expands to a JSON object over its columns.
-knit-graph prov.db "MATCH (a:\`ns:f\`) RETURN a"
+knit-cypher-to-sql prov.db "MATCH (a:\`ns:f\`) RETURN a"
 
 # Untyped edge (-->): match a relationship of ANY type. The generated SQL simply
 # omits the edge_type filter (compare with the -[:calls]-> example above).
-knit-graph prov.db "MATCH (a:\`ns:f\`)-->(b:\`ns2:g\`) RETURN b.id, count(*) AS n ORDER BY n DESC LIMIT 5"
+knit-cypher-to-sql prov.db "MATCH (a:\`ns:f\`)-->(b:\`ns2:g\`) RETURN b.id, count(*) AS n ORDER BY n DESC LIMIT 5"
 
 # See the generated SQL without touching the database.
-knit-graph --explain prov.db "MATCH (a:\`ns:f\`)-[:calls*1..3]->(b:\`ns2:g\`) RETURN b.id"
+knit-cypher-to-sql --explain prov.db "MATCH (a:\`ns:f\`)-[:calls*1..3]->(b:\`ns2:g\`) RETURN b.id"
 ```
 
 ## Supported Cypher (read subset)
 
-knit-graph is specifically designed for the needs of the Knit framework, hence it only implements a subset of Cypher that it needs (namely, read operations).
+knit-cypher-to-sql is specifically designed for the needs of the Knit framework, hence it only implements a subset of Cypher that it needs (namely, read operations).
 
 - `MATCH` / `WHERE` / `RETURN`, `ORDER BY`, `SKIP`, `LIMIT`, `DISTINCT`
 - Patterns: single node, relationship with direction (`->`, `<-`) or undirected (`--`), multi-hop
