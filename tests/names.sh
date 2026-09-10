@@ -1,46 +1,18 @@
 #!/bin/sh
-# names.sh -- end-to-end tests for the command-name <-> table-name map and the
-# inline relationship property maps that fill the `alias` column.
+# names.sh -- the command-name <-> table-name map and the inline relationship
+# property maps that fill the `alias` column, asserted on the generated SQL
+# (schema on stdin, no database).
 #
-# The fixture deliberately gives each override command a table whose name
-# differs from the `*_name` its edges record (table `jobs` / name `submit`,
-# table `montecarlo` / name `submit:montecarlo`), so the map's two readings are
-# actually exercised -- unlike the shared fixture, where table == name. Skipped
-# if the sqlite3 CLI is unavailable.
+# The schema deliberately gives each override command a table whose name differs
+# from the `*_name` its edges record (table `jobs` / name `submit`, table
+# `montecarlo` / name `submit:montecarlo`), so the map's two readings are
+# actually exercised. Needs no sqlite3 CLI.
 
 : "${KG:?KG must point at the knit-cypher-to-sql binary}"
 
-command -v sqlite3 >/dev/null 2>&1 || {
-	echo "sqlite3 CLI unavailable; skipping names test"
-	exit 77
-}
-
-db="names_fixture.db"
-rm -f "$db"
-sqlite3 "$db" <<'SQL'
-CREATE TABLE "jobs"       (id TEXT, procs INTEGER);
-CREATE TABLE "montecarlo" (id TEXT, result REAL);
-CREATE TABLE "setup:libs" (id TEXT);
-CREATE TABLE "__provenance__" (
-	source_id   TEXT,
-	source_name TEXT,
-	target_id   TEXT,
-	target_name TEXT,
-	edge_type   TEXT,
-	start_time  REAL,
-	end_time    REAL,
-	alias       TEXT
-);
-INSERT INTO "jobs"       VALUES ('j1', 8);
-INSERT INTO "montecarlo" VALUES ('m1', 3.14), ('m2', 2.71);
-INSERT INTO "setup:libs" VALUES ('s1');
-INSERT INTO "__provenance__" VALUES
-	-- setup used by the job: source = setup, target = job (name 'submit').
-	('s1', 'setup:libs', 'j1', 'submit',            'used_by', NULL, NULL, NULL),
-	-- two calls of the same body, told apart by their knit_as alias.
-	('j1', 'submit',     'm1', 'submit:montecarlo', 'call',    1.0,  2.0,  'fast'),
-	('j1', 'submit',     'm2', 'submit:montecarlo', 'call',    3.0,  4.0,  'slow');
-SQL
+schemafile="names_schema.txt"
+printf 'jobs\tid,procs\nmontecarlo\tid,result\nsetup:libs\tid\n__provenance__\tsource_id,source_name,target_id,target_name,edge_type,start_time,end_time,alias\n' \
+	> "$schemafile"
 
 # The live map knit query would build for this experiment.
 MAP='jobs=submit
@@ -49,74 +21,66 @@ setup:libs=setup:libs'
 
 fail=0
 
-# expect QUERY EXPECTED: run QUERY with $MAP; stdout must match EXPECTED (\n
-# escapes via printf %b, as in exec.sh).
+# expect QUERY EXPECTED-SQL: translate QUERY with $MAP; the SQL must match.
 expect() {
-	"$KG" --names "$MAP" "$db" "$1" > names_got.out 2>&1
-	printf '%b' "$2" > names_exp.out
-	if ! diff -u names_exp.out names_got.out; then
+	got=$("$KG" --names "$MAP" "$1" < "$schemafile" 2>&1)
+	if [ "$got" != "$2" ]; then
 		echo "FAIL: $1"
+		echo "  expected: $2"
+		echo "  got:      $got"
 		fail=1
 	fi
 }
 
 # reject ARGS...: the invocation must fail with a non-zero exit.
 reject() {
-	if "$KG" "$@" >/dev/null 2>&1; then
+	if "$KG" "$@" < "$schemafile" >/dev/null 2>&1; then
 		echo "FAIL: should have been rejected: $*"
 		fail=1
 	fi
 }
 
 # A label written as the command name joins the table and filters on the name.
-expect 'MATCH (j:submit) RETURN j.procs' 'procs\n8\n'
-# The table-name spelling returns the same row.
-expect 'MATCH (j:jobs) RETURN j.procs' 'procs\n8\n'
+expect 'MATCH (j:submit) RETURN j.procs' \
+	'SELECT j."procs" FROM "jobs" j'
+# The table-name spelling resolves to the very same SQL.
+expect 'MATCH (j:jobs) RETURN j.procs' \
+	'SELECT j."procs" FROM "jobs" j'
 
-# Inline alias singles out one of the two otherwise-identical calls.
+# Inline alias singles out one of two otherwise-identical calls.
 expect "MATCH (j:submit)-[{alias:'fast'}]->(m:montecarlo) RETURN m.result" \
-	'result\n3.14\n'
+	'SELECT m."result" FROM "__provenance__" r JOIN "montecarlo" m ON m."id" = r."target_id" WHERE r."source_name" = '"'"'submit'"'"' AND r."target_name" = '"'"'submit:montecarlo'"'"' AND r."alias" = '"'"'fast'"'"''
 expect "MATCH (j:submit)-[{alias:'slow'}]->(m:montecarlo) RETURN m.result" \
-	'result\n2.71\n'
-# The equivalent WHERE form yields the same row (inline lowers to it).
+	'SELECT m."result" FROM "__provenance__" r JOIN "montecarlo" m ON m."id" = r."target_id" WHERE r."source_name" = '"'"'submit'"'"' AND r."target_name" = '"'"'submit:montecarlo'"'"' AND r."alias" = '"'"'slow'"'"''
+# The equivalent WHERE form lowers to the same predicate (edge variable `e`).
 expect "MATCH (j:submit)-[e]->(m:montecarlo) WHERE e.alias = 'fast' RETURN m.result" \
-	'result\n3.14\n'
+	'SELECT m."result" FROM "__provenance__" e JOIN "montecarlo" m ON m."id" = e."target_id" WHERE e."source_name" = '"'"'submit'"'"' AND e."target_name" = '"'"'submit:montecarlo'"'"' AND e."alias" = '"'"'fast'"'"''
 
 # used_by hop from the setup (source) to the job it is used by (target). The
 # dispatcher command name `submit` reads better than the table name `jobs`.
-expect 'MATCH (s:`setup:libs`)-[:used_by]->(j:submit) RETURN j.procs' 'procs\n8\n'
+expect 'MATCH (s:`setup:libs`)-[:used_by]->(j:submit) RETURN j.procs' \
+	'SELECT j."procs" FROM "__provenance__" r JOIN "jobs" j ON j."id" = r."target_id" WHERE r."edge_type" = '"'"'used_by'"'"' AND r."source_name" = '"'"'setup:libs'"'"' AND r."target_name" = '"'"'submit'"'"''
 
 # --names-file supplies the same map from a file.
 printf '%s\n' "$MAP" > names_map.txt
-"$KG" --names-file names_map.txt "$db" 'MATCH (j:submit) RETURN j.procs' \
-	> names_got.out 2>&1
-printf '%b' 'procs\n8\n' > names_exp.out
-if ! diff -u names_exp.out names_got.out; then
+got=$("$KG" --names-file names_map.txt 'MATCH (j:submit) RETURN j.procs' < "$schemafile" 2>&1)
+if [ "$got" != 'SELECT j."procs" FROM "jobs" j' ]; then
 	echo "FAIL: --names-file"
-	fail=1
-fi
-
-# --derive-table-names reconstructs the map from the data (no map supplied): the
-# name 'submit' is resolved to the table `jobs` that holds its id.
-"$KG" --derive-table-names "$db" 'MATCH (j:submit) RETURN j.procs' \
-	> names_got.out 2>&1
-printf '%b' 'procs\n8\n' > names_exp.out
-if ! diff -u names_exp.out names_got.out; then
-	echo "FAIL: --derive-table-names"
+	echo "  got: $got"
 	fail=1
 fi
 
 # Errors.
 reject --names 'jobs=submit
-x=jobs' "$db" 'MATCH (j:jobs) RETURN j.procs'      # ambiguous label
-reject --names 'no-equals-sign' "$db" 'MATCH (j:jobs) RETURN j.procs'  # bad spec
-reject --names '=submit' "$db" 'MATCH (j:jobs) RETURN j.procs'         # empty table
-reject --names-file no_such_file "$db" 'MATCH (j:jobs) RETURN j.procs' # missing file
-reject --names 'both=one' --names-file names_map.txt "$db" \
-	'MATCH (j:jobs) RETURN j.procs'                                # both map sources
-reject --names 'ghost=phantom' "$db" 'MATCH (a:phantom) RETURN a.id'   # maps to no table
-reject --names "$MAP" "$db" \
+x=jobs' 'MATCH (j:jobs) RETURN j.procs'                          # ambiguous label
+reject --names 'no-equals-sign' 'MATCH (j:jobs) RETURN j.procs' # bad spec
+reject --names '=submit' 'MATCH (j:jobs) RETURN j.procs'        # empty table
+reject --names-file no_such_file 'MATCH (j:jobs) RETURN j.procs' # missing file
+reject --names 'both=one' --names-file names_map.txt \
+	'MATCH (j:jobs) RETURN j.procs'                              # both map sources
+reject --names 'ghost=phantom' 'MATCH (a:phantom) RETURN a.id'  # maps to no table
+reject --names "$MAP" \
 	"MATCH (j:submit)-[{nope:'x'}]->(m:montecarlo) RETURN m.result" # bad edge column
 
-rm -f "$db" names_got.out names_exp.out names_map.txt
+rm -f "$schemafile" names_map.txt
 exit $fail

@@ -4,18 +4,22 @@
 [![Code coverage](https://github.com/knit-sh/knit-cypher-to-sql/actions/workflows/coverage.yml/badge.svg)](https://github.com/knit-sh/knit-cypher-to-sql/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/knit-sh/knit-cypher-to-sql/branch/main/graph/badge.svg)](https://codecov.io/gh/knit-sh/knit-cypher-to-sql)
 
-A standalone C program that accepts a read-only [Cypher](https://opencypher.org/) statement,
-translates it to SQL, and runs it against a SQLite **provenance** database from the Knit framework — so graph-shaped
-questions can be asked in graph syntax while all storage and execution stay in SQLite.
+A standalone C program that translates a read-only [Cypher](https://opencypher.org/) statement into
+SQL for a Knit **provenance** database — so graph-shaped questions can be asked in graph syntax while
+all storage and execution stay in SQLite.
 
-knit-cypher-to-sql is inspired by [graphqlite](https://github.com/dpapathanasiou/graphqlite): it
-reuses the ideas — a Cypher→SQL transpiler pipeline, backtick-quoted labels, an `--explain` mode —
-but is an independent implementation with its own compact parser and a transformer specialised to the
-fixed provenance schema below.
+knit-cypher-to-sql is a **pure transpiler**: it never opens a database and never runs a query. It
+reads a compact text description of the schema on stdin, validates the statement's labels and columns
+against it, and prints the SQL. The Knit framework runs the returned SQL itself. This keeps the
+program dependency-free — it links nothing beyond the C library.
 
-## The database schema
+It is inspired by [graphqlite](https://github.com/dpapathanasiou/graphqlite): it reuses the ideas — a
+Cypher→SQL transpiler pipeline and backtick-quoted labels — but is an independent implementation with
+its own compact parser and a transformer specialised to the fixed provenance schema below.
 
-knit-cypher-to-sql targets one specific shape of SQLite database:
+## The provenance schema
+
+knit-cypher-to-sql targets one specific shape of database:
 
 - **Node tables** — one per function, named e.g. `` `ns:f` `` (namespaces separated by colons). The
   columns are the function's arguments and return values, plus an `id` column holding a uuid7 that
@@ -25,11 +29,23 @@ knit-cypher-to-sql targets one specific shape of SQLite database:
   `g`): `*_name` is the peer's table name, `*_id` its uuid, and `alias` disambiguates repeated calls
   (`NULL` by default).
 
-The database is always opened **read-only**; write Cypher clauses are rejected.
+Only read queries are translated; write Cypher clauses are rejected.
+
+### Schema input
+
+The transpiler learns the schema from stdin: one line per table, a tab separating the table name from
+a comma-separated column list. The form is type-free — a table is a **node** table if it has a column
+named `id`, and the **edge** table is the one named `__provenance__`:
+
+```
+ns:f<TAB>id,x,y
+ns2:g<TAB>id,z
+__provenance__<TAB>source_id,source_name,target_id,target_name,edge_type,start_time,end_time,alias
+```
 
 ## Building
 
-## Building from git
+### Building from git
 
 ```sh
 autoreconf -i
@@ -38,15 +54,15 @@ mkdir build && cd build
 make
 ```
 
-Build dependencies: gcc, autoconf, automake, bison, flex, and the sqlite3 C library. No libtool
-(knit-cypher-to-sql is a standalone binary). These apply to the **git checkout**, where the parser/scanner
-are regenerated from `cypher_parser.y` / `cypher_scanner.l`.
+Build dependencies: a C compiler, autoconf, automake, bison, and flex. No libtool and **no SQLite
+development files** — the transpiler links nothing from SQLite. These apply to the **git checkout**,
+where the parser/scanner are regenerated from `cypher_parser.y` / `cypher_scanner.l`.
 
 ### Building from a release tarball
 
 A `make dist` tarball already contains the generated parser and scanner (`cypher_parser.c`,
-`cypher_parser.h`, `cypher_scanner.c`), so building it needs **only gcc and `libsqlite3-dev`** —
-autotools, bison, and flex are *not* required:
+`cypher_parser.h`, `cypher_scanner.c`), so building it needs **only a C compiler** — autotools,
+bison, and flex are *not* required:
 
 ```sh
 tar xzf knit-cypher-to-sql-0.1.0.tar.gz && cd knit-cypher-to-sql-0.1.0
@@ -56,55 +72,20 @@ make
 make install
 ```
 
-### Building against a non-default SQLite
-
-By default the build uses the SQLite header and library on the compiler's search
-paths (a system-wide `libsqlite3-dev`). To build against a SQLite installed under
-a custom prefix instead, pass `--with-sqlite3=DIR`:
-
-```sh
-../configure --with-sqlite3=/opt/sqlite
-```
-
-This adds `DIR/include` to the header search path and `DIR/lib` to the library
-search path, and records an rpath to `DIR/lib` so the resulting binary finds a
-shared `libsqlite3` there at runtime. Knit uses this to build knit-cypher-to-sql against
-its own private SQLite (`.knit/sqlite`).
-
 ## Usage
 
 ```
-knit-cypher-to-sql [OUTPUT-OPTIONS] [NAME-OPTIONS] DBFILE 'CYPHER'
-knit-cypher-to-sql --ast 'CYPHER'
-knit-cypher-to-sql [NAME-OPTIONS] --explain DBFILE 'CYPHER'
-knit-cypher-to-sql --catalog DBFILE [TABLE[.COLUMN]]
+knit-cypher-to-sql [--names SPEC | --names-file FILE] 'CYPHER'   # schema on stdin -> SQL
+knit-cypher-to-sql --ast 'CYPHER'                                # print the syntax tree
 ```
 
 Modes:
 
-| Mode        | Effect                                                                       |
-|-------------|------------------------------------------------------------------------------|
-| (default)   | translate to SQL, run it against `DBFILE`, print the result set              |
-| `--ast`     | parse only and print the syntax tree (no database needed)                    |
-| `--explain` | translate to SQL and print it, without executing                            |
-| `--catalog` | list the database's tables and columns; with `TABLE`/`TABLE.COLUMN`, validate that reference |
-| `-h`, `--help` | show usage                                                                |
-
-### Output options
-
-Mirroring the sqlite3 CLI (default is `-list`):
-
-```
--ascii  -box  -column  -csv  -html  -json  -line  -list  -markdown  -table  -tabs
--header / -noheader        show or hide the column-name header (default: header on)
--separator SEP             column separator (list/csv/tabs/ascii modes)
--newline SEP               row separator    (list/csv/tabs/ascii modes)
-```
-
-Each mode reproduces the sqlite3 shell's formatting byte-for-byte for the equivalent query; the test
-suite pins this by diffing against the installed `sqlite3` (see below). Two intentional differences:
-the header is **on** by default (the sqlite3 CLI defaults to off), and an empty result set prints
-nothing in every mode (matching the sqlite3 shell).
+| Mode           | Effect                                                          |
+|----------------|----------------------------------------------------------------|
+| (default)      | translate `CYPHER` to SQL against the schema on stdin, print it |
+| `--ast`        | parse only and print the syntax tree (no schema)               |
+| `-h`, `--help` | show usage                                                      |
 
 ### Label resolution (name map)
 
@@ -116,34 +97,33 @@ writes `jobs`). A **name map** bridges the two — each entry pairs a table name
 its edges carry — and is read both ways, so a label may be written as either spelling:
 
 ```
---names SPEC          map entries `table=name`, separated by newlines or `;`
---names-file FILE      read the same map from FILE
---derive-table-names   with no map, derive it from the data (uuid-exact)
+--names SPEC         map entries `table=name`, separated by newlines or `;`
+--names-file FILE     read the same map from FILE
 ```
 
 With a map of `jobs=submit`, both `(:jobs)` and `(:submit)` resolve to a JOIN on `jobs` filtered by
 `*_name = 'submit'`. A label that is a table name for one command and a command name for a *different*
 command is genuinely ambiguous and is reported as an error rather than guessed. A label absent from
-the map (or when no map is given) resolves to itself, so the default behaviour is unchanged. The map
-options apply to the default run and `--explain`; `knit query` in Knit builds this map live from the
-experiment's registered commands and passes it on every invocation.
+the map (or when no map is given) resolves to itself, so the default behaviour is unchanged. `knit
+query` in Knit builds this map live from the experiment's registered commands and passes it on every
+invocation.
 
 ### Examples
 
 ```sh
-# The five most-called ns2:g targets, as JSON.
-knit-cypher-to-sql -json prov.db \
+# The five most-called ns2:g targets. The schema is piped on stdin.
+schema='ns:f	id,x,y
+ns2:g	id,z
+__provenance__	source_id,source_name,target_id,target_name,edge_type,start_time,end_time,alias'
+
+printf '%s' "$schema" | knit-cypher-to-sql \
   "MATCH (a:\`ns:f\`)-[:calls]->(b:\`ns2:g\`) RETURN b.id, count(*) AS n ORDER BY n DESC LIMIT 5"
 
 # A whole node expands to a JSON object over its columns.
-knit-cypher-to-sql prov.db "MATCH (a:\`ns:f\`) RETURN a"
+printf '%s' "$schema" | knit-cypher-to-sql "MATCH (a:\`ns:f\`) RETURN a"
 
-# Untyped edge (-->): match a relationship of ANY type. The generated SQL simply
-# omits the edge_type filter (compare with the -[:calls]-> example above).
-knit-cypher-to-sql prov.db "MATCH (a:\`ns:f\`)-->(b:\`ns2:g\`) RETURN b.id, count(*) AS n ORDER BY n DESC LIMIT 5"
-
-# See the generated SQL without touching the database.
-knit-cypher-to-sql --explain prov.db "MATCH (a:\`ns:f\`)-[:calls*1..3]->(b:\`ns2:g\`) RETURN b.id"
+# --ast needs no schema.
+knit-cypher-to-sql --ast "MATCH (a:\`ns:f\`)-[:calls*1..3]->(b:\`ns2:g\`) RETURN b.id"
 ```
 
 ## Supported Cypher (read subset)
@@ -173,10 +153,10 @@ with a clear error and a nonzero exit.
 make check        # from the build directory; runs the automake TESTS
 ```
 
-The suite (in `tests/`) covers parsing (valid/invalid batteries, AST golden files), the catalog,
-`--explain` translation, end-to-end execution, all output modes (diffed against the installed
-`sqlite3` CLI), and a `valgrind` leak check. Tests needing the `sqlite3` CLI or `valgrind` are
-skipped gracefully when those tools are absent.
+The suite (in `tests/`) covers parsing (valid/invalid batteries, AST golden files), golden
+Cypher→SQL pairs driven by a schema on stdin (including label/column validation and error cases), the
+name map, and a `valgrind` leak check. The tests need no database — only the `valgrind` check is
+skipped gracefully when that tool is absent.
 
 ## Coverage
 

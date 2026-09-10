@@ -18,7 +18,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential autoconf automake \
-            bison flex libsqlite3-dev sqlite3 valgrind lcov
+            bison flex valgrind lcov
 
       - name: Build (coverage instrumented) and run the test suite
         run: |

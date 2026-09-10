@@ -9,8 +9,6 @@ knit_cypher_to_sql_SOURCES = \
 	names.c names.h \
 	sqlbuf.c sqlbuf.h \
 	transform.c transform.h \
-	exec.c exec.h \
-	output.c output.h \
 	cypher_parser.y \
 	cypher_scanner.l
 

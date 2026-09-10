@@ -13,12 +13,8 @@ TESTS = \
 	valid.sh \
 	invalid.sh \
 	ast_golden.sh \
-	catalog.sh \
-	explain.sh \
 	transpile.sh \
-	exec.sh \
 	names.sh \
-	output.sh \
 	memcheck.sh
 
 # Ship the tests and their fixtures in the distribution tarball.
@@ -27,12 +23,7 @@ EXTRA_DIST = \
 	valid.sh \
 	invalid.sh \
 	ast_golden.sh \
-	catalog.sh \
-	explain.sh \
 	transpile.sh \
-	exec.sh \
 	names.sh \
-	output.sh \
 	memcheck.sh \
-	fixture.sh \
 	golden

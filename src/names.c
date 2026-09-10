@@ -73,15 +73,6 @@ static void map_add(NameMap *m, const char *table, const char *name)
 	m->n++;
 }
 
-/* Non-zero if the map already has an entry whose table is NAME. */
-static int map_has_table(const NameMap *m, const char *name)
-{
-	for (int i = 0; i < m->n; i++)
-		if (strcmp(m->entries[i].table, name) == 0)
-			return 1;
-	return 0;
-}
-
 /* Trim leading and trailing ASCII spaces/tabs in place; returns s. */
 static char *trim(char *s)
 {
@@ -197,95 +188,6 @@ int names_parse_file(const char *path, NameMap **out, char **errmsg)
 	int rc = names_parse(buf, out, errmsg);
 	free(buf);
 	return rc;
-}
-
-/* Find the catalog table (other than the edge table) holding a row with ID. */
-static int table_holding_id(sqlite3 *db, const Catalog *cat, const char *id,
-                           const char **table, char **errmsg)
-{
-	*table = NULL;
-	for (int i = 0; i < cat->ntables; i++) {
-		const char *tname = cat->tables[i].name;
-		if (strcmp(tname, KG_EDGE_TABLE) == 0)
-			continue;
-
-		char *sql = sqlite3_mprintf(
-			"SELECT 1 FROM \"%w\" WHERE \"id\" = ?1 LIMIT 1", tname);
-		if (!sql)
-			return fail(errmsg, "out of memory");
-
-		sqlite3_stmt *st = NULL;
-		int rc = sqlite3_prepare_v2(db, sql, -1, &st, NULL);
-		sqlite3_free(sql);
-		if (rc != SQLITE_OK)
-			return fail(errmsg, "%s", sqlite3_errmsg(db));
-
-		sqlite3_bind_text(st, 1, id, -1, SQLITE_TRANSIENT);
-		rc = sqlite3_step(st);
-		sqlite3_finalize(st);
-		if (rc == SQLITE_ROW) {
-			*table = tname;
-			return 0;
-		}
-		if (rc != SQLITE_DONE)
-			return fail(errmsg, "%s", sqlite3_errmsg(db));
-	}
-	return 0;
-}
-
-int names_derive(sqlite3 *db, const Catalog *cat, NameMap **out, char **errmsg)
-{
-	*out = NULL;
-	if (errmsg)
-		*errmsg = NULL;
-
-	NameMap *m = map_new();
-
-	/* Every distinct name in the edge table, with a representative id. */
-	const char *q =
-		"SELECT source_name, source_id FROM \"" KG_EDGE_TABLE "\" "
-		"WHERE source_name IS NOT NULL "
-		"UNION "
-		"SELECT target_name, target_id FROM \"" KG_EDGE_TABLE "\" "
-		"WHERE target_name IS NOT NULL";
-	sqlite3_stmt *st = NULL;
-	int rc = sqlite3_prepare_v2(db, q, -1, &st, NULL);
-	if (rc != SQLITE_OK) {
-		fail(errmsg, "%s", sqlite3_errmsg(db));
-		names_free(m);
-		return 1;
-	}
-
-	int failed = 0;
-	while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
-		const unsigned char *name = sqlite3_column_text(st, 0);
-		const unsigned char *id = sqlite3_column_text(st, 1);
-		if (!name || !id)
-			continue;
-		/* One entry per name suffices (a name maps to one table). */
-		if (map_has_table(m, (const char *)name))
-			continue;
-
-		const char *table = NULL;
-		if (table_holding_id(db, cat, (const char *)id, &table, errmsg)) {
-			failed = 1;
-			break;
-		}
-		if (table)
-			map_add(m, table, (const char *)name);
-	}
-	sqlite3_finalize(st);
-
-	if (!failed && rc != SQLITE_DONE && rc != SQLITE_ROW) {
-		fail(errmsg, "%s", sqlite3_errmsg(db));
-		failed = 1;
-	}
-	if (failed) {
-		names_free(m);
-		return 1;
-	}
-	*out = m;
-	return 0;
 }
 
 int names_resolve(const NameMap *map, const char *label,

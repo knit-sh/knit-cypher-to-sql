@@ -1,5 +1,5 @@
 #!/bin/sh
-# memcheck.sh -- run the parse and catalog paths under valgrind.
+# memcheck.sh -- run the parse and transpile paths under valgrind.
 #
 # A definite/indirect leak or any memory error makes valgrind exit with the
 # distinctive code 99, which we treat as a failure. Ordinary non-zero exits
@@ -8,14 +8,11 @@
 # code being mistaken for one. Skipped if valgrind is not installed.
 
 : "${KG:?KG must point at the knit-cypher-to-sql binary}"
-: "${srcdir:?srcdir must be set}"
 
 if ! command -v valgrind >/dev/null 2>&1; then
 	echo "valgrind unavailable; skipping memory check"
 	exit 77
 fi
-
-. "$srcdir/fixture.sh"
 
 VG="valgrind -q --leak-check=full --errors-for-leak-kinds=definite,indirect --error-exitcode=99"
 
@@ -28,12 +25,12 @@ run() {
 	fi
 }
 
-# Successful parses.
+# --ast: successful parses.
 run $VG "$KG" --ast "MATCH (a:Foo) RETURN a"
 run $VG "$KG" --ast "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN b.id, count(*) AS n ORDER BY n DESC LIMIT 5"
 run $VG "$KG" --ast "MATCH (a)-[:calls*1..3]-(b) WHERE a.x > 1 AND b.name STARTS WITH 'abc' RETURN DISTINCT a"
 
-# Rejected parses -- these exercise the error-path cleanup (the M1 leak).
+# --ast: rejected parses -- these exercise the error-path cleanup.
 run $VG "$KG" --ast ""
 run $VG "$KG" --ast "MATCH (a"
 run $VG "$KG" --ast "CREATE (a) RETURN a"
@@ -41,129 +38,44 @@ run $VG "$KG" --ast "MATCH (a) RETURN"
 run $VG "$KG" --ast "MATCH (a)-[r:calls]-> RETURN a"
 
 # Transpile path (schema on stdin, no database): success and error cleanup, so
-# read_all_stdin, catalog_from_schema and the transformer are leak-checked. A
-# redirection on the `run` call feeds stdin without a pipe subshell, so a
-# valgrind failure still propagates to $fail.
+# read_all_stdin, catalog_from_schema, the transformer and names.c are all
+# leak-checked. A redirection on the `run` call feeds stdin without a pipe
+# subshell, so a valgrind failure still propagates to $fail. The schema's "kv"
+# has no id column, so it is dropped (its own cleanup path).
 printf 'ns:f\tid,x,y\nns2:g\tid,z\nkv\tkey,value\n__provenance__\tsource_id,source_name,target_id,target_name,edge_type,start_time,end_time,alias\n' > vg_schema.txt
+
+# Successful translations across the SQL shapes.
 run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN a.x AS ex, a.y" < vg_schema.txt
 run $VG "$KG" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN r.alias, b.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)<-[r:calls]-(b:\`ns2:g\`) RETURN b.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) WHERE a.x >= 1 AND a.y <> 'z' OR NOT a.x IN [3] RETURN a.x" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) WHERE b.z > 1.0 AND r.alias IS NULL RETURN a.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[:calls]->(b:\`ns2:g\`)-[:wraps]->(c:\`ns:f\`) RETURN a.id, c.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns2:g\`)-[r:calls]-(b:\`ns:f\`) RETURN a.id, b.id" < vg_schema.txt
 run $VG "$KG" "MATCH (a:\`ns:f\`)-[:calls*1..3]->(b:\`ns2:g\`) RETURN a.id, b.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[:calls*]->(b:\`ns2:g\`) RETURN b.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN a.y, count(a.x) AS n ORDER BY n DESC LIMIT 5" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN collect(a.id) AS ids" < vg_schema.txt
 run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN a" < vg_schema.txt
-run $VG "$KG" --names 'ns:f=fnode' "MATCH (a:fnode) RETURN a.x" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN a.id, b" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[:calls {alias:'fast'}]->(b:\`ns2:g\`) RETURN b.id" < vg_schema.txt
+
+# Error/cleanup paths.
 run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN a.nope" < vg_schema.txt
 run $VG "$KG" "MATCH (a:kv) RETURN a.key" < vg_schema.txt
 run $VG "$KG" "MATCH (a:\`ns:f\`) RETRUN a.x" < vg_schema.txt
-rm -f vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) WHERE a.y STARTS WITH a.x RETURN a.y" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[{nope:'x'}]->(b:\`ns2:g\`) RETURN b.id" < vg_schema.txt
 
-# Catalog paths, if a fixture can be built.
-db="vg_fixture.db"
-if make_fixture "$db"; then
-	run $VG "$KG" --catalog "$db"
-	run $VG "$KG" --catalog "$db" "ns:f"
-	run $VG "$KG" --catalog "$db" "ns:f.x"
-	run $VG "$KG" --catalog "$db" "nope"
-	run $VG "$KG" --catalog "$db" "ns:f.nope"
-
-	# --explain: successful translations and rejected/erroring ones, so the
-	# transformer's cleanup is exercised on both paths.
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`) RETURN a.x"
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN r.alias, b.id"
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)<-[r:calls]-(b:\`ns2:g\`) RETURN b.id"
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`) RETURN a.nope"
-	run $VG "$KG" --explain "$db" "MATCH (a) WHERE a.x = 1 RETURN a.x"
-
-	# Full execution path (parse -> transform -> exec -> output): a node query,
-	# a relationship query (with a NULL field), and an erroring translation.
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN a.x AS ex, a.y"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN r.alias, b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN a.nope"
-
-	# WHERE path (M5): a compound node filter, a rel filter joining b in via
-	# WHERE, a LIKE, and error paths (unknown column and a non-literal LIKE).
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`) WHERE a.x >= 1 AND a.y <> 'z' OR NOT a.x IN [3] RETURN a.x"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) WHERE a.y STARTS WITH 'a' RETURN a.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) WHERE b.z > 1.0 AND r.alias IS NULL RETURN a.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) WHERE a.nope = 1 RETURN a.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) WHERE a.y STARTS WITH a.x RETURN a.y"
-
-	# Pattern engine (M6): a two-hop chain, an undirected hop, a multi-pattern
-	# match, and error paths (undirected in a chain, conflicting labels).
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)-[r1:calls]->(b:\`ns2:g\`)-[r2:wraps]->(c:\`ns:f\`) WHERE a.x = 1 RETURN a.id, c.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls]->(b:\`ns2:g\`)-[:wraps]->(c:\`ns:f\`) RETURN a.id, c.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns2:g\`)-[r:calls]-(b:\`ns:f\`) RETURN a.id, b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`), (b:\`ns2:g\`) RETURN a.id, b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls]->(b)-[:wraps]-(c) RETURN a.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls]->(a:\`ns2:g\`) RETURN a.id"
-
-	# Aggregation/DISTINCT/ORDER BY/SKIP/LIMIT (M7): grouped aggregate, collect,
-	# DISTINCT, ordered+paged, and error paths (bad function, bad arity,
-	# non-integer LIMIT, unknown ORDER BY name).
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN b.id, count(*) AS n"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN a.y, count(a.x) AS n ORDER BY n DESC LIMIT 5"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN collect(a.id) AS ids"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`), (b:\`ns2:g\`) RETURN DISTINCT b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN a.x ORDER BY a.x SKIP 1 LIMIT 2"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN foo(a.x)"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN sum(a.x, a.y)"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN a.x LIMIT a.x"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN a.x ORDER BY zzz"
-
-	# Variable-length paths / recursive CTE (M8): bounded, unbounded and
-	# reversed translations, the full execution path over the fixture's 'chain'
-	# cycle (unbounded exercises the edge-uniqueness termination guard), and
-	# error paths (bad bounds, bound rel var, undirected, not the sole hop).
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)-[:calls*1..3]->(b:\`ns2:g\`) RETURN a.id, b.id"
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)-[:calls*]->(b:\`ns2:g\`) RETURN b.id"
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)<-[:calls*2..4]-(b:\`ns2:g\`) RETURN a.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:chain*1..2]->(b:\`ns:f\`) WHERE a.id = 'f1' RETURN b.id ORDER BY b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:chain*]->(b:\`ns:f\`) WHERE a.id = 'f1' RETURN b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls*0..2]->(b:\`ns:f\`) RETURN b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls*3..2]->(b:\`ns:f\`) RETURN b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[r:calls*1..2]->(b:\`ns:f\`) RETURN b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls*1..2]-(b:\`ns:f\`) RETURN b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls*1..2]->(b:\`ns2:g\`)-[:wraps]->(c) RETURN b.id"
-
-	# Whole node / relationship in RETURN (M9): the json_object expansion on
-	# the translation and execution paths, plus an error path (unknown var).
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`) RETURN a"
-	run $VG "$KG" --explain "$db" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN r"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN a"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN a.id, b"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`) RETURN b"
-
-	# Output modes (M10): exercise the buffered result set and each renderer
-	# family -- separated, csv, html, json, line, and the columnar/box path --
-	# plus an empty result (the buffer's early-return path).
-	run $VG "$KG" -json "$db" "MATCH (a:\`ns:f\`) RETURN a"
-	run $VG "$KG" -box "$db" "MATCH (a:\`ns:f\`) RETURN a.id, a.x, a.y"
-	run $VG "$KG" -table -noheader "$db" "MATCH (a:\`ns:f\`) RETURN a.id"
-	run $VG "$KG" -markdown "$db" "MATCH (a:\`ns:f\`) RETURN a.id, a.x"
-	run $VG "$KG" -column "$db" "MATCH (a:\`ns:f\`) RETURN a.id, a.x"
-	run $VG "$KG" -csv "$db" "MATCH (a:\`ns:f\`) RETURN a.id, a.y"
-	run $VG "$KG" -html "$db" "MATCH (a:\`ns:f\`) RETURN a.y"
-	run $VG "$KG" -line "$db" "MATCH (a:\`ns:f\`) RETURN a.id, a.x"
-	run $VG "$KG" -ascii -noheader "$db" "MATCH (a:\`ns:f\`) RETURN a.id"
-	run $VG "$KG" -separator ';' -newline '#' "$db" "MATCH (a:\`ns:f\`) RETURN a.id, a.x"
-	run $VG "$KG" -json "$db" "MATCH (a:\`ns:f\`)<-[r:calls]-(b:\`ns2:g\`) RETURN b.id"
-
-	# Name map (M3): --names/--names-file/--derive-table-names and inline
-	# relationship property maps, on success and on the error paths (ambiguous
-	# label, invalid spec, missing file, bad edge column), so names.c's
-	# allocations and the transformer's inline-prop path are leak-checked.
-	printf 'ns:f=fnode\n' > vg_map.txt
-	run $VG "$KG" --names 'ns:f=fnode' "$db" "MATCH (a:fnode) RETURN a.x"
-	run $VG "$KG" --names-file vg_map.txt --explain "$db" "MATCH (a:\`ns:f\`) RETURN a.x"
-	run $VG "$KG" --derive-table-names "$db" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[:calls {alias:'fast'}]->(b:\`ns2:g\`) RETURN b.id"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[{alias:'fast'}]-(b:\`ns2:g\`) RETURN b.id"
-	run $VG "$KG" --names 'ns:f=fnode
-x=ns:f' "$db" "MATCH (a:\`ns:f\`) RETURN a.x"
-	run $VG "$KG" --names 'no-equals' "$db" "MATCH (a:\`ns:f\`) RETURN a.x"
-	run $VG "$KG" --names-file no_such_file "$db" "MATCH (a:\`ns:f\`) RETURN a.x"
-	run $VG "$KG" "$db" "MATCH (a:\`ns:f\`)-[{nope:'x'}]->(b:\`ns2:g\`) RETURN b.id"
-	rm -f vg_map.txt
-
-	rm -f "$db"
-fi
+# Name map: --names/--names-file on success and error paths (ambiguous label,
+# invalid spec, missing file), so names.c's allocations are leak-checked.
+printf 'ns:f=fnode\n' > vg_map.txt
+run $VG "$KG" --names 'ns:f=fnode' "MATCH (a:fnode) RETURN a.x" < vg_schema.txt
+run $VG "$KG" --names-file vg_map.txt "MATCH (a:\`ns:f\`) RETURN a.x" < vg_schema.txt
+run $VG "$KG" --names 'ns:f=fnode
+x=ns:f' "MATCH (a:\`ns:f\`) RETURN a.x" < vg_schema.txt
+run $VG "$KG" --names 'no-equals' "MATCH (a:\`ns:f\`) RETURN a.x" < vg_schema.txt
+run $VG "$KG" --names-file no_such_file "MATCH (a:\`ns:f\`) RETURN a.x" < vg_schema.txt
+rm -f vg_map.txt vg_schema.txt
 
 exit $fail

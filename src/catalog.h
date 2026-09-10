@@ -1,24 +1,23 @@
 /*
- * catalog.h -- schema introspection for a knit-cypher-to-sql provenance database.
+ * catalog.h -- the provenance schema the transformer validates a query against.
  *
- * On load the catalog reads sqlite_master and PRAGMA table_info to learn which
- * tables exist and what columns each has. Function (node) tables use their
- * name directly (colons denote namespaces, e.g. "ns:f"); the edge table is
- * "__provenance__". The transformer (M3+) uses this to expand "RETURN a",
- * resolve labels/properties to columns, and report unknown tables/columns.
+ * The catalog is built from the flat text schema on the program's input (see
+ * catalog_from_schema): which tables exist and what columns each has. Function
+ * (node) tables use their name directly (colons denote namespaces, e.g. "ns:f");
+ * the edge table is "__provenance__". The transformer uses this to expand
+ * "RETURN a", resolve labels/properties to columns, and report unknown
+ * tables/columns.
  *
  * Only tables that participate in the graph are catalogued: the edge table,
- * plus any table with an "id" column typed TEXT (the UUID7 key that ties node
- * rows to edges). Tables without such a key -- e.g. plain key/value stores --
- * are skipped, keeping the catalog small and confined to queryable entities.
+ * plus any table with an "id" column (the UUID7 key that ties node rows to
+ * edges). Tables without such a key -- e.g. plain key/value stores -- are
+ * skipped, keeping the catalog small and confined to queryable entities.
  *
  * The catalog owns all of its memory; catalog_free releases it.
  */
 
 #ifndef KNIT_CYPHER_TO_SQL_CATALOG_H
 #define KNIT_CYPHER_TO_SQL_CATALOG_H
-
-#include <sqlite3.h>
 
 /* The conventional name of the provenance edge table. */
 #define KG_EDGE_TABLE "__provenance__"
@@ -33,13 +32,6 @@ typedef struct Catalog {
 	CatalogTable *tables;   /* sorted by name */
 	int           ntables;
 } Catalog;
-
-/*
- * Load the catalog from an open database. Returns 0 and stores the catalog in
- * *out on success. On failure returns non-zero and, if errmsg is non-NULL,
- * stores a malloc'd message there (caller frees).
- */
-int catalog_load(sqlite3 *db, Catalog **out, char **errmsg);
 
 /*
  * Build the catalog from the flat text schema passed on the program's input

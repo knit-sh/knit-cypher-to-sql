@@ -26,10 +26,6 @@
 #ifndef KNIT_CYPHER_TO_SQL_NAMES_H
 #define KNIT_CYPHER_TO_SQL_NAMES_H
 
-#include <sqlite3.h>
-
-#include "catalog.h"
-
 typedef struct NameMap NameMap;
 
 /*
@@ -43,15 +39,6 @@ int names_parse(const char *spec, NameMap **out, char **errmsg);
 
 /* Read a spec from PATH, then names_parse it. */
 int names_parse_file(const char *path, NameMap **out, char **errmsg);
-
-/*
- * Derive the map from the data (the opt-in --derive-table-names path): for each
- * distinct `*_name` value in the edge table, resolve one of its ids to the
- * catalog table that holds it (uuid-exact) and record (table, name). Names with
- * no holding table are skipped. Returns 0 / stores *out, or non-zero with a
- * malloc'd errmsg.
- */
-int names_derive(sqlite3 *db, const Catalog *cat, NameMap **out, char **errmsg);
 
 /*
  * Resolve LABEL to its (table, name) pair. On success returns 0 and stores
