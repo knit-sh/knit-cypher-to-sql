@@ -34,13 +34,16 @@ static const char *PROG = "knit-cypher-to-sql";
 static void usage(FILE *out)
 {
 	fprintf(out,
-		"Usage: %s [OUTPUT-OPTIONS] DBFILE 'CYPHER'\n"
+		"Usage: %s [--names SPEC] 'CYPHER'   (flat schema on stdin -> SQL)\n"
+		"       %s [OUTPUT-OPTIONS] DBFILE 'CYPHER'\n"
 		"       %s --ast 'CYPHER'\n"
 		"       %s --explain DBFILE 'CYPHER'\n"
 		"       %s --catalog DBFILE [TABLE[.COLUMN]]\n"
 		"\n"
-		"Translate a read-only Cypher statement into SQL and run it against the\n"
-		"SQLite provenance database DBFILE (opened read-only).\n"
+		"With one positional argument, translate the Cypher statement into SQL,\n"
+		"validating labels and columns against the flat schema read on stdin (one\n"
+		"line per table, 'name<TAB>col,col,...'), and print the SQL. With DBFILE\n"
+		"and a statement, translate against DBFILE's schema and run it.\n"
 		"\n"
 		"Modes:\n"
 		"  --ast         parse only and print the syntax tree (no database)\n"
@@ -60,7 +63,7 @@ static void usage(FILE *out)
 		"  -header / -noheader   show or hide the column-name header\n"
 		"  -separator SEP        column separator (list/csv/tabs/ascii modes)\n"
 		"  -newline SEP          row separator     (list/csv/tabs/ascii modes)\n",
-		PROG, PROG, PROG, PROG);
+		PROG, PROG, PROG, PROG, PROG);
 }
 
 /*
@@ -118,6 +121,47 @@ static sqlite3 *open_db_ro(const char *dbfile)
 		return NULL;
 	}
 	return db;
+}
+
+/*
+ * Read all of stdin into a NUL-terminated malloc'd buffer (the flat schema).
+ * Returns NULL on a read or allocation error; the caller frees the result.
+ */
+static char *read_all_stdin(void)
+{
+	size_t cap = 4096, len = 0;
+	char *buf = malloc(cap);
+	if (!buf)
+		return NULL;
+
+	size_t n;
+	while ((n = fread(buf + len, 1, cap - len, stdin)) > 0) {
+		len += n;
+		if (len == cap) {
+			char *grown = realloc(buf, cap * 2);
+			if (!grown) {
+				free(buf);
+				return NULL;
+			}
+			buf = grown;
+			cap *= 2;
+		}
+	}
+	if (ferror(stdin)) {
+		free(buf);
+		return NULL;
+	}
+
+	if (len == cap) {
+		char *grown = realloc(buf, cap + 1);
+		if (!grown) {
+			free(buf);
+			return NULL;
+		}
+		buf = grown;
+	}
+	buf[len] = '\0';
+	return buf;
 }
 
 /* Parse the query, reporting any error to stderr. Returns the tree or NULL. */
@@ -321,6 +365,51 @@ static int run_explain(const char *dbfile, const char *query,
 }
 
 /*
+ * Transpile path: read the flat schema from stdin, parse QUERY, translate it to
+ * SQL against that schema (resolving labels through map), and print the SQL. No
+ * database is opened. Returns a process exit code.
+ */
+static int run_transpile(const char *query, const NameMap *map)
+{
+	char *schema = read_all_stdin();
+	if (!schema) {
+		fprintf(stderr, "%s: cannot read schema from stdin\n", PROG);
+		return 1;
+	}
+
+	Catalog *cat = NULL;
+	char *err = NULL;
+	if (catalog_from_schema(schema, &cat, &err) != 0) {
+		fprintf(stderr, "%s: %s\n", PROG, err ? err : "cannot read schema");
+		free(err);
+		free(schema);
+		return 1;
+	}
+	free(schema);
+
+	Query *q = parse_or_report(query);
+	if (!q) {
+		catalog_free(cat);
+		return 1;
+	}
+
+	char *sql = NULL;
+	int status = 0;
+	if (transform_query(q, cat, map, &sql, &err) != 0) {
+		fprintf(stderr, "%s: %s\n", PROG, err ? err : "cannot translate query");
+		status = 1;
+	} else {
+		printf("%s\n", sql);
+	}
+
+	free(sql);
+	free(err);
+	ast_free_query(q);
+	catalog_free(cat);
+	return status;
+}
+
+/*
  * Default path: parse QUERY, translate it to SQL against DBFILE's schema,
  * execute it, and print the result set in "-list" format. Returns an exit code.
  */
@@ -483,8 +572,32 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
+	/*
+	 * One positional (CYPHER): transpile it against the flat schema on stdin
+	 * and print the SQL -- no database. Two positionals (DBFILE CYPHER): the
+	 * legacy execute path, kept until knit stops using it.
+	 */
+	if (npos == 1) {
+		if (derive) {
+			fprintf(stderr,
+				"%s: --derive-table-names needs a database and cannot be used "
+				"with the stdin schema\n", PROG);
+			usage(stderr);
+			return 2;
+		}
+		NameMap *map = NULL;
+		int mrc = build_explicit_map(names_spec, names_file, &map);
+		if (mrc)
+			return mrc;
+		int rc = run_transpile(pos[0], map);
+		names_free(map);
+		return rc;
+	}
+
 	if (npos != 2) {
-		fprintf(stderr, "%s: expected DBFILE and a Cypher statement\n", PROG);
+		fprintf(stderr,
+			"%s: expected a Cypher statement (schema on stdin) or DBFILE and a "
+			"Cypher statement\n", PROG);
 		usage(stderr);
 		return 2;
 	}

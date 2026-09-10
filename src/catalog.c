@@ -177,6 +177,82 @@ int catalog_load(sqlite3 *db, Catalog **out, char **errmsg)
 	return 0;
 }
 
+/* Non-zero if the table has a column named "id" (case-insensitive). */
+static int table_has_id(const CatalogTable *t)
+{
+	for (int j = 0; j < t->ncolumns; j++) {
+		if (strcasecmp(t->columns[j], "id") == 0)
+			return 1;
+	}
+	return 0;
+}
+
+int catalog_from_schema(const char *schema, Catalog **out, char **errmsg)
+{
+	*out = NULL;
+	if (errmsg)
+		*errmsg = NULL;
+
+	Catalog *cat = calloc(1, sizeof(*cat));
+	if (!cat) {
+		set_err(errmsg, "out of memory");
+		return 1;
+	}
+
+	/* Parse a mutable copy line by line, splitting each at the first tab into
+	 * a table name and its comma-separated column list. */
+	char *copy = xstrdup(schema ? schema : "");
+	char *line = copy;
+	while (*line) {
+		char *nl = strchr(line, '\n');
+		if (nl)
+			*nl = '\0';
+
+		if (line[0] != '\0') {          /* skip blank lines */
+			char *tab = strchr(line, '\t');
+			char *cols = NULL;
+			if (tab) {
+				*tab = '\0';
+				cols = tab + 1;
+			}
+			CatalogTable *t = catalog_add_table(cat, line);
+			for (char *c = cols; c && *c; ) {
+				char *comma = strchr(c, ',');
+				if (comma)
+					*comma = '\0';
+				if (*c != '\0')
+					table_add_column(t, c);
+				if (!comma)
+					break;
+				c = comma + 1;
+			}
+		}
+
+		if (!nl)
+			break;
+		line = nl + 1;
+	}
+	free(copy);
+
+	/* Keep only graph tables: the edge table, or a table with an "id" column.
+	 * The kept tables are compacted to the front of the array in place. */
+	int nkept = 0;
+	for (int i = 0; i < cat->ntables; i++) {
+		CatalogTable *t = &cat->tables[i];
+		if (table_has_id(t) || strcmp(t->name, KG_EDGE_TABLE) == 0) {
+			if (nkept != i)
+				cat->tables[nkept] = *t;
+			nkept++;
+		} else {
+			free_table_contents(t);
+		}
+	}
+	cat->ntables = nkept;
+
+	*out = cat;
+	return 0;
+}
+
 void catalog_free(Catalog *cat)
 {
 	if (!cat)

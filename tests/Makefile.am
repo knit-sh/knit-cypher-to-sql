@@ -15,6 +15,7 @@ TESTS = \
 	ast_golden.sh \
 	catalog.sh \
 	explain.sh \
+	transpile.sh \
 	exec.sh \
 	names.sh \
 	output.sh \
@@ -28,6 +29,7 @@ EXTRA_DIST = \
 	ast_golden.sh \
 	catalog.sh \
 	explain.sh \
+	transpile.sh \
 	exec.sh \
 	names.sh \
 	output.sh \

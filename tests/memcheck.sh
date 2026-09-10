@@ -40,6 +40,21 @@ run $VG "$KG" --ast "CREATE (a) RETURN a"
 run $VG "$KG" --ast "MATCH (a) RETURN"
 run $VG "$KG" --ast "MATCH (a)-[r:calls]-> RETURN a"
 
+# Transpile path (schema on stdin, no database): success and error cleanup, so
+# read_all_stdin, catalog_from_schema and the transformer are leak-checked. A
+# redirection on the `run` call feeds stdin without a pipe subshell, so a
+# valgrind failure still propagates to $fail.
+printf 'ns:f\tid,x,y\nns2:g\tid,z\nkv\tkey,value\n__provenance__\tsource_id,source_name,target_id,target_name,edge_type,start_time,end_time,alias\n' > vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN a.x AS ex, a.y" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[r:calls]->(b:\`ns2:g\`) RETURN r.alias, b.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`)-[:calls*1..3]->(b:\`ns2:g\`) RETURN a.id, b.id" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN a" < vg_schema.txt
+run $VG "$KG" --names 'ns:f=fnode' "MATCH (a:fnode) RETURN a.x" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) RETURN a.nope" < vg_schema.txt
+run $VG "$KG" "MATCH (a:kv) RETURN a.key" < vg_schema.txt
+run $VG "$KG" "MATCH (a:\`ns:f\`) RETRUN a.x" < vg_schema.txt
+rm -f vg_schema.txt
+
 # Catalog paths, if a fixture can be built.
 db="vg_fixture.db"
 if make_fixture "$db"; then

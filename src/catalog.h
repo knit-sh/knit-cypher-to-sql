@@ -41,6 +41,22 @@ typedef struct Catalog {
  */
 int catalog_load(sqlite3 *db, Catalog **out, char **errmsg);
 
+/*
+ * Build the catalog from the flat text schema passed on the program's input
+ * instead of from a live database: one line per table, a tab separating the
+ * table name from a comma-separated column list, e.g.
+ *
+ *     jobs<TAB>id,state,hostnames
+ *     __provenance__<TAB>source_id,source_name,target_id,target_name,edge_type
+ *
+ * Blank lines are ignored. The form is type-free, so node-ness is by name
+ * alone: a table is kept if it has a column named "id" or is the edge table
+ * __provenance__; other tables are dropped. Returns 0 and stores the catalog
+ * in *out. On failure returns non-zero and, if errmsg is non-NULL, stores a
+ * malloc'd message there (caller frees).
+ */
+int catalog_from_schema(const char *schema, Catalog **out, char **errmsg);
+
 void catalog_free(Catalog *cat);
 
 /* Look up a table by exact name; returns NULL if there is no such table. */
